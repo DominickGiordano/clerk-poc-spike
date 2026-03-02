@@ -26,11 +26,13 @@ import {hooks as colocatedHooks} from "phoenix-colocated/phoenix_app"
 import topbar from "../vendor/topbar"
 import ClerkSignIn from "./hooks/clerk_sign_in"
 import ClerkSignOut from "./hooks/clerk_sign_out"
+import ClerkUserButton from "./hooks/clerk_user_button"
 
 const Hooks = {
   ...colocatedHooks,
   ClerkSignIn,
   ClerkSignOut,
+  ClerkUserButton,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

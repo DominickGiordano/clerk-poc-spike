@@ -12,10 +12,10 @@ defmodule PhoenixAppWeb.HomeLive do
 
       <%= if @current_user do %>
         <p class="mb-4">Welcome back, <%= @current_user.email %>.</p>
-        <.link href="/dashboard" class="text-blue-600 underline">Go to Dashboard</.link>
+        <.link href="/dashboard" class="text-green-300 underline">Go to Dashboard</.link>
       <% else %>
-        <p class="text-gray-600 mb-4">Sign in to access the dashboard.</p>
-        <.link href="/sign-in" class="text-blue-600 underline">Sign In</.link>
+        <p class="mb-4">Sign in to access the dashboard.</p>
+        <.link href="/sign-in" class="text-green-300 underline">Sign In</.link>
       <% end %>
     </div>
     """

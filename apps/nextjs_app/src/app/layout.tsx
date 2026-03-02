@@ -36,10 +36,10 @@ export default function RootLayout({
     <ClerkProvider dynamic>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-900 text-green-400`}
         >
-          <header className="flex justify-between items-center p-4 border-b">
-            <h1 className="text-lg font-semibold">Clerk POC - Next.js</h1>
+          <header className="flex justify-between items-center p-4 border-b border-gray-700">
+            <h1 className="text-lg font-semibold text-green-400">Clerk POC - Next.js</h1>
             <div>
               <SignedOut>
                 <SignInButton mode="modal" />

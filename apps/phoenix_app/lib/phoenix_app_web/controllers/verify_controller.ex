@@ -14,7 +14,8 @@ defmodule PhoenixAppWeb.VerifyController do
           clerk_id: user.clerk_id,
           email: user.email,
           org_id: user.org_id,
-          org_role: user.org_role
+          org_role: user.org_role,
+          org_slug: user.org_slug
         })
     end
   end

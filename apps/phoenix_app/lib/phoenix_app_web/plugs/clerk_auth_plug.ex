@@ -29,15 +29,20 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlug do
       token ->
         case verify_token(token) do
           {:ok, claims} ->
+            # Clerk v2 JWTs nest org data under "o" with short keys
+            org = claims["o"] || %{}
+
             user = %{
               clerk_id: claims["sub"],
               email: claims["email"],
-              org_id: claims["org_id"],
-              org_role: claims["org_role"]
+              org_id: org["id"] || claims["org_id"],
+              org_role: org["rol"] || claims["org_role"],
+              org_slug: org["slg"]
             }
 
             conn
             |> assign(:current_user, user)
+            |> assign(:raw_claims, claims)
             |> safe_put_session(:current_user, user)
 
           {:error, _reason} ->

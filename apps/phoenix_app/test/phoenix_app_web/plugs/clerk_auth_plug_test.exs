@@ -39,7 +39,8 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlugTest do
                clerk_id: "user_test123",
                email: "test@example.com",
                org_id: nil,
-               org_role: nil
+               org_role: nil,
+               org_slug: nil
              }
     end
   end
@@ -59,7 +60,8 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlugTest do
                clerk_id: "user_test123",
                email: "test@example.com",
                org_id: nil,
-               org_role: nil
+               org_role: nil,
+               org_slug: nil
              }
     end
   end
@@ -132,8 +134,33 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlugTest do
     end
   end
 
-  describe "token with org claims" do
-    test "populates org fields from token", %{private_key: private_key} do
+  describe "token with org claims (Clerk v2 format)" do
+    test "populates org fields from nested 'o' claim", %{private_key: private_key} do
+      claims =
+        valid_claims(%{
+          "o" => %{"id" => "org_abc123", "rol" => "admin", "slg" => "my-org"}
+        })
+
+      token = sign_jwt(claims, private_key)
+
+      conn =
+        build_conn()
+        |> init_test_session(%{})
+        |> put_req_cookie("__session", token)
+        |> ClerkAuthPlug.call(%{})
+
+      assert conn.assigns.current_user == %{
+               clerk_id: "user_test123",
+               email: "test@example.com",
+               org_id: "org_abc123",
+               org_role: "admin",
+               org_slug: "my-org"
+             }
+    end
+  end
+
+  describe "token with legacy org claims" do
+    test "populates org fields from flat org_id/org_role claims", %{private_key: private_key} do
       claims =
         valid_claims(%{
           "org_id" => "org_abc123",
@@ -152,7 +179,8 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlugTest do
                clerk_id: "user_test123",
                email: "test@example.com",
                org_id: "org_abc123",
-               org_role: "admin"
+               org_role: "admin",
+               org_slug: nil
              }
     end
   end

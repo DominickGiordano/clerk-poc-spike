@@ -6,7 +6,7 @@ export default function Home() {
     <div className="max-w-2xl mx-auto mt-8">
       <h2 className="text-2xl font-bold mb-4">Clerk Auth Spike</h2>
       <SignedOut>
-        <p className="text-gray-600">Sign in to access the dashboard.</p>
+        <p>Sign in to access the dashboard.</p>
       </SignedOut>
       <SignedIn>
         <p className="mb-4">You are signed in.</p>

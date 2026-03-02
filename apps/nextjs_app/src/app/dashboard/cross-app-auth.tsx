@@ -30,20 +30,20 @@ export function CrossAppAuth() {
   };
 
   return (
-    <div className="bg-white border rounded-lg p-6">
+    <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
       <h3 className="text-lg font-semibold mb-4">Cross-App Auth Test</h3>
-      <p className="text-gray-600 text-sm mb-4">
+      <p className="text-green-600 text-sm mb-4">
         Sends your Clerk JWT to the Phoenix app&apos;s /api/verify endpoint.
       </p>
       <button
         onClick={testCrossAppAuth}
         disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
       >
         {loading ? "Testing..." : "Test Cross-App Auth"}
       </button>
       {result && (
-        <pre className="mt-4 p-4 bg-gray-100 rounded text-sm overflow-auto">
+        <pre className="mt-4 p-4 bg-gray-900 rounded text-sm overflow-auto text-green-300">
           {result}
         </pre>
       )}

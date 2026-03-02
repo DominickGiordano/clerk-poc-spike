@@ -26,6 +26,13 @@ defmodule PhoenixAppWeb.Router do
     end
   end
 
+  # Sign-out route — clears Phoenix session, then redirects
+  scope "/", PhoenixAppWeb do
+    pipe_through :browser
+
+    get "/sign-out", SignOutController, :sign_out
+  end
+
   # Authenticated routes — require signed-in user
   scope "/", PhoenixAppWeb do
     pipe_through :browser

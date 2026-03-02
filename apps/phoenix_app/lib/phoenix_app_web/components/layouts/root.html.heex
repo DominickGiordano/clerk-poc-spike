@@ -39,7 +39,13 @@
       })();
     </script>
   </head>
-  <body>
-    {@inner_content}
+  <body class="bg-gray-900 text-green-400">
+    <header class="flex justify-between items-center p-4 border-b border-gray-700">
+      <a href="/" class="text-lg font-semibold text-green-400 no-underline">Clerk POC - Phoenix</a>
+      <div id="clerk-user-button" phx-hook="ClerkUserButton" phx-update="ignore"></div>
+    </header>
+    <main class="p-4">
+      {@inner_content}
+    </main>
   </body>
 </html>
