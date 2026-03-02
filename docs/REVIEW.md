@@ -109,8 +109,6 @@ Runs after ClerkAuthPlug. Takes Clerk claims, upserts a local Ash User record (b
 
 ## What's Left Before Rollout
 
-### You need from IT / your manager:
-
 1. **Entra ID OAuth credentials** for Clerk — so we can add Microsoft as a social provider in Clerk Dashboard. This lets the team keep "Sign in with Microsoft" unchanged.
    - Needs: Azure App Registration → Client ID + Client Secret → paste into Clerk Dashboard → Social Connections → Microsoft
    - This is read-only from Entra's perspective — no changes to existing Entra ID setup
