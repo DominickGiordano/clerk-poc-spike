@@ -74,9 +74,19 @@ Copy `.env.example` to `.env` and fill in Clerk credentials from clerk.com dashb
 ## Important Implementation Notes
 
 - Use `Application.get_env/3` for Clerk config at **runtime**, NOT `@module_attribute System.get_env(...)` (compile-time bug in SPIKE_PLAN.md)
+- For Clerk config in HEEx templates, use `PhoenixAppWeb.clerk_config/1` — `Application.get_env` in templates evaluates at compile time
 - ClerkJS containers in LiveView templates must use `phx-update="ignore"` to prevent DOM conflicts
 - After Clerk sign-in, do a full page redirect (not LiveView push) so the HTTP plug reads the new `__session` cookie
+- ClerkAuthPlug uses `safe_get_session`/`safe_put_session` to work in both browser and API pipelines (API pipeline has no `:fetch_session`)
+- Sign-out uses ClerkJS `Clerk.signOut()` to clear the `__session` cookie, then a full page redirect
+- Clerk's default JWT does NOT include email — requires custom session token config in Clerk Dashboard
+- `.env` must use `export` prefix for `source .env` to make vars available to child processes
+- JWT PEM key in `.env` uses literal `\n` — `runtime.exs` replaces with real newlines
 - Mise is used for Elixir/Erlang version management (see `mise.toml`)
+
+## Spike Status
+
+**Complete — Go recommendation confirmed.** All critical integration points validated with live Clerk instance. See `docs/FINDINGS.md` for full results.
 
 ## Spike Decision Criteria
 

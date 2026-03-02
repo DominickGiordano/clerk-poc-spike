@@ -32,7 +32,17 @@ defmodule PhoenixAppWeb.DashboardLive do
         </dl>
       </div>
 
-      <div class="text-sm text-gray-500">
+      <div class="mt-6">
+        <button
+          id="clerk-sign-out"
+          phx-hook="ClerkSignOut"
+          class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+        >
+          Sign Out
+        </button>
+      </div>
+
+      <div class="text-sm text-gray-500 mt-6">
         <p>Auth flow: ClerkJS → __session cookie → ClerkAuthPlug → Phoenix session → LiveView on_mount</p>
       </div>
     </div>

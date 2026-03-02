@@ -11,10 +11,11 @@
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
     <script
+      :if={PhoenixAppWeb.clerk_config(:frontend_api_url)}
       async
       crossorigin="anonymous"
-      data-clerk-publishable-key={Application.get_env(:phoenix_app, :clerk)[:publishable_key]}
-      src={"#{Application.get_env(:phoenix_app, :clerk)[:frontend_api_url]}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"}
+      data-clerk-publishable-key={PhoenixAppWeb.clerk_config(:publishable_key)}
+      src={"#{PhoenixAppWeb.clerk_config(:frontend_api_url)}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"}
       type="text/javascript"
     >
     </script>

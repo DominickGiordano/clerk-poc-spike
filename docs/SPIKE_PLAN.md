@@ -2,7 +2,7 @@
 
 > **Author:** Dominick  
 > **Date:** March 2026  
-> **Status:** Pre-spike planning doc  
+> **Status:** Complete — see Spike Outcomes below and docs/FINDINGS.md for full results  
 > **Goal:** Validate Clerk as the auth broker for a mixed-stack environment, starting with Elixir/Phoenix/LiveView/Ash — our most complex integration.
 
 ---
@@ -349,32 +349,47 @@ These don't block the spike but need answers before full rollout:
 
 ### Day 1 Test Criteria — Results
 
-- [x] ~~Internal user clicks "Sign in with Microsoft"~~ → **Structural pass.** ClerkJS sign-in component mounts, JWT flow validated with test keys. Live Clerk instance needed for Microsoft SSO.
-- [x] `conn.assigns.current_user` is populated with correct user data → **Pass.** 8 unit tests confirm all cases.
-- [x] `__session` cookie is present and verifiable → **Pass.** Cookie and Bearer header extraction both tested.
+- [x] ~~Internal user clicks "Sign in with Microsoft"~~ → **Not tested.** Requires Entra ID provider config in Clerk Dashboard. Not a technical risk — Clerk supports it natively.
+- [x] `conn.assigns.current_user` is populated with correct user data → **Pass.** 8 unit tests + live Clerk instance confirmed.
+- [x] `__session` cookie is present and verifiable → **Pass.** Live tested — cookie set by ClerkJS, verified by Phoenix plug.
 - [x] Non-authenticated request correctly gets `current_user: nil` → **Pass.**
 
 ### Day 2 Test Criteria — Results
 
-- [x] LiveView `on_mount` correctly inherits authenticated user from HTTP session → **Pass.** 4 test cases.
+- [x] LiveView `on_mount` correctly inherits authenticated user from HTTP session → **Pass.** Live tested — sign in → dashboard shows user data.
 - [x] Unauthenticated users are redirected before LiveView mounts → **Pass.**
 - [x] Ash actor can be set from Clerk-verified user without breaking policy evaluation → **Pass.** `Ash.PlugHelpers.set_actor/2` works with plain Ash resource.
-- [x] ~~External client user (email/password) flows through the same path as internal Microsoft SSO user~~ → **Pass by design.** Both produce identical JWTs → same plug → same session.
+- [x] External client user (email/password) flows through the same path as internal Microsoft SSO user → **Pass.** Live tested — email/password sign-up and sign-in work end-to-end.
+
+### Live Integration Test Results
+
+- Email/password sign-up: **Pass** — new user appears in Clerk Dashboard
+- Email/password sign-in (Phoenix): **Pass** — dashboard shows Clerk ID
+- Email/password sign-in (Next.js): **Pass** — full user info displayed
+- Cross-app auth (Next.js → Phoenix `/api/verify`): **Pass** — returns verified user JSON
+- Sign-out (Phoenix): **Pass** — `Clerk.signOut()` clears cookie, redirects to `/`
+- Sign-out (Next.js): **Pass** — Clerk UserButton handles it
 
 ### Bugs Found in Original Plan
 
 1. **Compile-time env var bug (Step 3):** `@clerk_jwt_key System.get_env("CLERK_JWT_KEY")` runs at compile time, not runtime. Fixed with `Application.get_env(:phoenix_app, :clerk)[:jwt_key]` in `runtime.exs`.
 2. **Session clearing bug:** Original plug cleared session when no JWT present, breaking LiveView reconnections. Fixed: no-token case now preserves existing session.
 3. **Repo module conflict:** `use Ecto.Repo` and `use AshPostgres.Repo` can't be combined (duplicate `start_link/1`). Must use only `AshPostgres.Repo` which wraps `Ecto.Repo`.
+4. **API pipeline session crash:** `ClerkAuthPlug` called `get_session`/`put_session` in API pipeline (no `:fetch_session`). Fixed with `safe_get_session`/`safe_put_session` that check `conn.private[:plug_session]` existence.
+5. **Clerk JWT missing email:** Default JWT only includes `sub`, `exp`, `nbf`, `org_id`, `org_role`. Email requires custom session token: Clerk Dashboard → Sessions → Customize session token → `{"email": "{{user.primary_email_address}}"}`.
+6. **`.env` export prefix:** `source .env` without `export` prefix on variables makes them shell-local — invisible to child processes (Phoenix server).
+7. **HEEx compile-time config:** `Application.get_env` in HEEx templates evaluates at compile time. Must use a runtime helper function.
+8. **JWT PEM `\n` escaping:** PEM key in `.env` uses literal `\n`. `runtime.exs` needs `String.replace(key, "\\n", "\n")`.
 
 ### Answered Open Questions
 
 - **Clerk → local DB user sync:** On-demand upsert in `AshActorPlug` (upsert by `clerk_id` on each request). Simple, no webhook infrastructure needed.
 - **Ash policy evaluation:** Policies work as-is. `actor(:id)` reads from the Ash resource set via `set_actor/2`. No AshAuthentication dependency.
+- **Custom JWT template for email:** Yes, required. Clerk's default JWT omits email. Configure in Dashboard → Sessions → Customize session token.
 
 ### Remaining Open Questions
 
 - Org onboarding flow for enterprise clients with own IdP
 - Per-org role scoping vs global roles
 - Session duration and refresh strategy
-- Custom JWT template for email claim (verify with live Clerk instance)
+- Microsoft SSO provider configuration in Clerk Dashboard

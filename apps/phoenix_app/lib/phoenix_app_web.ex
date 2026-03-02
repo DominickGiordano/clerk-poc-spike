@@ -19,6 +19,11 @@ defmodule PhoenixAppWeb do
 
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
+  @doc "Reads Clerk config at runtime. Safe to call from templates."
+  def clerk_config(key) do
+    Application.get_env(:phoenix_app, :clerk)[key]
+  end
+
   def router do
     quote do
       use Phoenix.Router, helpers: false

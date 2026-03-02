@@ -10,6 +10,7 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlug do
   - Token found + invalid → clear session and assigns (sign-out / expired)
   - No token found → read existing session into assigns (preserves LiveView session bridge)
 
+  Works in both browser (with session) and API (without session) pipelines.
   Uses runtime config — never compile-time module attributes for env vars.
   """
   import Plug.Conn
@@ -22,7 +23,7 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlug do
     case extract_token(conn) do
       nil ->
         # No JWT present — preserve existing session (may have been set by a prior request)
-        existing = get_session(conn, :current_user)
+        existing = safe_get_session(conn, :current_user)
         assign(conn, :current_user, atomize_keys(existing))
 
       token ->
@@ -37,12 +38,12 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlug do
 
             conn
             |> assign(:current_user, user)
-            |> put_session(:current_user, user)
+            |> safe_put_session(:current_user, user)
 
           {:error, _reason} ->
             conn
             |> assign(:current_user, nil)
-            |> put_session(:current_user, nil)
+            |> safe_put_session(:current_user, nil)
         end
     end
   end
@@ -87,6 +88,18 @@ defmodule PhoenixAppWeb.Plugs.ClerkAuthPlug do
           {:error, reason}
       end
     end
+  end
+
+  # Session helpers that work in both browser and API pipelines.
+  # API pipeline doesn't call :fetch_session, so session ops would crash.
+  defp has_session?(conn), do: Map.has_key?(conn.private, :plug_session)
+
+  defp safe_get_session(conn, key) do
+    if has_session?(conn), do: get_session(conn, key), else: nil
+  end
+
+  defp safe_put_session(conn, key, value) do
+    if has_session?(conn), do: put_session(conn, key, value), else: conn
   end
 
   # Session data may come back with string keys after serialization

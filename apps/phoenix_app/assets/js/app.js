@@ -25,10 +25,12 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/phoenix_app"
 import topbar from "../vendor/topbar"
 import ClerkSignIn from "./hooks/clerk_sign_in"
+import ClerkSignOut from "./hooks/clerk_sign_out"
 
 const Hooks = {
   ...colocatedHooks,
   ClerkSignIn,
+  ClerkSignOut,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

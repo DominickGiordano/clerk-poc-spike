@@ -24,10 +24,17 @@ config :phoenix_app, PhoenixAppWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 # Clerk configuration — always loaded at runtime, never compile-time
+# The JWT key may contain literal "\n" from .env files — replace with real newlines
+clerk_jwt_key =
+  case System.get_env("CLERK_JWT_KEY") do
+    nil -> nil
+    key -> String.replace(key, "\\n", "\n")
+  end
+
 config :phoenix_app, :clerk,
   publishable_key: System.get_env("CLERK_PUBLISHABLE_KEY"),
   secret_key: System.get_env("CLERK_SECRET_KEY"),
-  jwt_key: System.get_env("CLERK_JWT_KEY"),
+  jwt_key: clerk_jwt_key,
   frontend_api_url: System.get_env("CLERK_FRONTEND_API_URL")
 
 if config_env() == :prod do

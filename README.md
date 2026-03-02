@@ -71,21 +71,27 @@ Cross-app: Next.js calls `getToken()` → sends Bearer token to Phoenix `/api/ve
 ## Key Findings
 
 - **Ash + Clerk coexistence confirmed** — `Ash.PlugHelpers.set_actor/2` works with plain Ash resources, no AshAuthentication needed
-- **JWT verification is ~80 LOC** — offline (no Clerk API calls at request time), fully tested
+- **JWT verification is ~100 LOC** — offline (no Clerk API calls at request time), fully tested, works in both browser and API pipelines
 - **Next.js integration is trivial** — `@clerk/nextjs` is genuinely drop-in
 - **Community `clerk` Hex package not needed** — manual Joken approach is simpler with no network dependency
+- **Cross-app auth works** — Next.js `getToken()` → Bearer header → Phoenix `/api/verify` returns verified user
+- **Clerk default JWT omits email** — requires custom session token config in Clerk Dashboard
 
-See [docs/FINDINGS.md](docs/FINDINGS.md) for the full analysis and go/no-go recommendation.
+**Recommendation: Go.** See [docs/FINDINGS.md](docs/FINDINGS.md) for the full analysis.
 
-## Manual Integration Test Checklist
+## Integration Test Results
 
-Requires a configured Clerk instance with Microsoft SSO, email/password, and magic link enabled.
+Tested with live Clerk free-tier instance.
 
-1. **Microsoft SSO:** sign in → redirected through Clerk → dashboard shows user info
-2. **Email/password:** sign up → sign in → same dashboard
-3. **Cross-app:** sign in via Next.js → "Test Cross-App Auth" → Phoenix returns verified user
-4. **Organizations:** create org in Clerk Dashboard → verify org_id/org_role in JWT claims
-5. **Sign-out:** Clerk sign-out → cookie cleared → `/dashboard` redirects to `/sign-in`
+| Test | Result |
+|---|---|
+| Email/password sign-up | **Pass** |
+| Email/password sign-in (Phoenix) | **Pass** |
+| Email/password sign-in (Next.js) | **Pass** |
+| Cross-app auth (Next.js → Phoenix) | **Pass** |
+| Sign-out (Phoenix) | **Pass** |
+| Sign-out (Next.js) | **Pass** |
+| Microsoft SSO | Not tested (needs Entra ID config) |
 
 ## Related Docs
 

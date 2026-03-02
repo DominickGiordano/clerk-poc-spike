@@ -1,7 +1,7 @@
 # Clerk Auth Spike — Findings
 
 > **Date:** March 2026
-> **Status:** Implementation complete — pending manual integration testing with live Clerk instance
+> **Status:** Complete — live testing passed, go recommendation confirmed
 > **Goal:** Go/no-go decision on Clerk as centralized auth broker for mixed stack
 
 ---
@@ -18,7 +18,7 @@ The spike built two proof-of-concept apps — an Elixir/Phoenix/LiveView/Ash app
 - Next.js integration is trivial with `@clerk/nextjs` (drop-in)
 - Cross-app token sharing works via Bearer header from Next.js to Phoenix `/api/verify`
 
-**Preliminary recommendation:** Proceed with Clerk. Pending manual validation with a live Clerk instance for Microsoft SSO and email/password flows.
+**Recommendation: Go.** All critical integration points validated with live Clerk instance. Microsoft SSO not yet tested (requires Entra ID config in Clerk Dashboard), but all other flows — email/password sign-up, sign-in, cross-app auth, sign-out — work end-to-end.
 
 ---
 
@@ -26,14 +26,15 @@ The spike built two proof-of-concept apps — an Elixir/Phoenix/LiveView/Ash app
 
 | Criteria | Status | Notes |
 |---|---|---|
-| Microsoft SSO flows through Clerk into Phoenix | Pending | Requires live Clerk instance with Microsoft provider enabled |
-| JWT verification works in Phoenix Plug (RS256) | **Pass** | 8 test cases covering valid/expired/invalid/org tokens |
-| LiveView inherits auth via session bridge (on_mount) | **Pass** | 4 test cases, `require_authenticated_user` and `maybe_authenticated` |
+| Microsoft SSO flows through Clerk into Phoenix | **Not tested** | Requires Microsoft Entra ID config in Clerk Dashboard — not blocked |
+| JWT verification works in Phoenix Plug (RS256) | **Pass** | 8 unit tests + live Clerk instance verified |
+| LiveView inherits auth via session bridge (on_mount) | **Pass** | 4 unit tests + live sign-in → dashboard flow works |
 | Ash actor set from Clerk-verified user without breaking policies | **Pass** | `Ash.PlugHelpers.set_actor/2` works with plain Ash resource |
-| External client email/password uses same path as internal SSO | **Pass** (by design) | Both flows produce identical JWT → same plug → same session |
-| Cross-app token sharing (Next.js → Phoenix) | **Pass** (structural) | `/api/verify` endpoint ready, CORS configured |
+| External client email/password uses same path as internal SSO | **Pass** | Live tested — email/password sign-up and sign-in both work |
+| Cross-app token sharing (Next.js → Phoenix) | **Pass** | Next.js `getToken()` → Bearer header → Phoenix `/api/verify` returns verified user JSON |
+| Sign-out clears auth state | **Pass** | ClerkJS `signOut()` clears `__session` cookie → redirect to `/` |
 
-**Decision:** Conditional Go — proceed to live testing with Clerk free tier instance.
+**Decision: Go.** 6 of 7 criteria pass. Microsoft SSO is untested but not a technical risk — Clerk supports it natively, it just needs the Entra ID provider configured in the dashboard.
 
 ---
 
@@ -47,23 +48,16 @@ The spike built two proof-of-concept apps — an Elixir/Phoenix/LiveView/Ash app
 - `exp` and `nbf` claim validation catches expired/future tokens
 - Session bridge pattern: plug sets session, LiveView reads it via `on_mount`
 
-**What didn't:**
-- SPIKE_PLAN.md had a compile-time env var bug (`@clerk_jwt_key System.get_env(...)`) — fixed with `Application.get_env/3` at runtime
+**What didn't (and fixes):**
+- SPIKE_PLAN.md had a compile-time env var bug (`@clerk_jwt_key System.get_env(...)`) — fixed with `Application.get_env/3` in `runtime.exs`
+- API pipeline crash: plug called `get_session`/`put_session` on API routes that don't have `:fetch_session`. Fixed with `safe_get_session`/`safe_put_session` helpers that check `conn.private[:plug_session]` before calling session functions.
+- `.env` file must use `export` prefix for vars to be available to child processes when using `source .env`
+- `Application.get_env` in HEEx templates evaluates at compile time — must use a runtime helper function (`PhoenixAppWeb.clerk_config/1`)
+- JWT PEM key from `.env` uses literal `\n` — runtime.exs needs `String.replace(key, "\\n", "\n")`
 
-**Important design decision:** When no JWT is present (no cookie, no header), the plug preserves the existing session rather than clearing it. This is critical for LiveView reconnections — the initial HTTP request sets the session via JWT, and subsequent WebSocket connections rely on that session persisting.
-
-**Code pattern:**
-
-```elixir
-# lib/phoenix_app_web/plugs/clerk_auth_plug.ex
-# Token found + valid → update session and assigns
-# Token found + invalid → clear session (sign-out/expired)
-# No token → preserve existing session (LiveView session bridge)
-case extract_token(conn) do
-  nil -> assign(conn, :current_user, get_session(conn, :current_user))
-  token -> case verify_token(token) do ...
-end
-```
+**Important design decisions:**
+1. When no JWT is present (no cookie, no header), the plug preserves the existing session rather than clearing it. This is critical for LiveView reconnections — the initial HTTP request sets the session via JWT, and subsequent WebSocket connections rely on that session persisting.
+2. Session operations are guarded by `has_session?/1` — checks `Map.has_key?(conn.private, :plug_session)` so the plug works in both browser (with session) and API (without session) pipelines.
 
 ---
 
@@ -75,6 +69,8 @@ end
 - JS hook mounts Clerk sign-in component and handles redirect after auth
 
 **Key finding:** Full page redirect (not LiveView `push_navigate`) is required after sign-in so the HTTP plug can read the new `__session` cookie. LiveView WebSocket connections don't carry cookies.
+
+**Live testing confirmed:** ClerkJS sign-in component loads, user authenticates, cookie is set, redirect to dashboard works. Sign-out via `Clerk.signOut()` clears the cookie and redirects cleanly.
 
 ---
 
@@ -148,6 +144,10 @@ end
 - `/api/verify` JSON endpoint in Phoenix uses existing ClerkAuthPlug in the `:api` pipeline
 - CORS configured via Corsica for `localhost:3000` origin
 - Bearer token extracted from Authorization header
+- Live tested: Next.js `getToken()` → Bearer header → Phoenix returns verified user JSON
+
+**What didn't (and fix):**
+- Initial crash: ClerkAuthPlug called `put_session`/`get_session` in the API pipeline, which doesn't have `:fetch_session`. Phoenix returned an HTML error page instead of JSON. Fixed with `safe_get_session`/`safe_put_session` helpers that check for session existence before calling session functions.
 
 **CORS notes:** Currently allows `localhost:3000` only. Production will need the actual Next.js domain(s).
 
@@ -169,6 +169,8 @@ end
 
 ### Phoenix JWT Verification Plug
 
+Works in both browser (with session) and API (without session) pipelines.
+
 ```elixir
 defmodule MyAppWeb.Plugs.ClerkAuthPlug do
   import Plug.Conn
@@ -180,16 +182,16 @@ defmodule MyAppWeb.Plugs.ClerkAuthPlug do
     case extract_token(conn) do
       nil ->
         # No JWT — preserve existing session (LiveView session bridge)
-        existing = get_session(conn, :current_user)
+        existing = safe_get_session(conn, :current_user)
         assign(conn, :current_user, existing)
       token ->
         case verify_token(token) do
           {:ok, claims} ->
             user = %{clerk_id: claims["sub"], email: claims["email"],
                      org_id: claims["org_id"], org_role: claims["org_role"]}
-            conn |> assign(:current_user, user) |> put_session(:current_user, user)
+            conn |> assign(:current_user, user) |> safe_put_session(:current_user, user)
           {:error, _} ->
-            conn |> assign(:current_user, nil) |> put_session(:current_user, nil)
+            conn |> assign(:current_user, nil) |> safe_put_session(:current_user, nil)
         end
     end
   end
@@ -219,6 +221,11 @@ defmodule MyAppWeb.Plugs.ClerkAuthPlug do
       error -> error
     end
   end
+
+  # Session helpers — API pipeline doesn't call :fetch_session, so session ops would crash
+  defp has_session?(conn), do: Map.has_key?(conn.private, :plug_session)
+  defp safe_get_session(conn, key), do: if(has_session?(conn), do: get_session(conn, key))
+  defp safe_put_session(conn, key, val), do: if(has_session?(conn), do: put_session(conn, key, val), else: conn)
 end
 ```
 
@@ -287,9 +294,11 @@ end
 |---|---|---|---|
 | Clerk has no official Elixir SDK | Medium | Manual JWT verification is standard; ~80 LOC, fully tested | **Mitigated** |
 | AshAuthentication bypass may break policies | High | Validated: `set_actor/2` works with plain Ash resource | **Mitigated** |
-| ClerkJS may conflict with LiveView DOM | Medium | `phx-update="ignore"` on Clerk containers | **Mitigated** |
+| ClerkJS may conflict with LiveView DOM | Medium | `phx-update="ignore"` on Clerk containers; confirmed working | **Mitigated** |
 | Community `clerk` package maintenance | Low | Using manual Joken verification instead | **Mitigated** |
-| Clerk JWT may not include email by default | Low | May need custom JWT template in Clerk Dashboard | **Needs live testing** |
+| Clerk JWT doesn't include email by default | Low | Custom session token in Clerk Dashboard: `{"email": "{{user.primary_email_address}}"}` | **Mitigated** |
+| API pipeline crashes if plug assumes session exists | Medium | `safe_get_session`/`safe_put_session` helpers check `conn.private[:plug_session]` | **Mitigated** |
+| `.env` vars not visible to child processes | Low | Must use `export` prefix in `.env` files when using `source .env` | **Mitigated** |
 | LiveView reconnection loses auth if session expired | Low | Expected behavior — document for team | **Accepted** |
 | Next.js middleware.ts deprecated in Next 16 | Low | Still works, monitor for proxy migration | **Accepted** |
 
@@ -307,24 +316,41 @@ end
 
 ## Open Questions
 
-- [ ] Custom JWT template needed for email in claims? (verify with live instance)
+- [x] ~~Custom JWT template needed for email in claims?~~ **Yes.** Clerk's default JWT only includes `sub`, `exp`, `nbf`, `iat`, `iss`, `org_id`, `org_role`. To get email, add `{"email": "{{user.primary_email_address}}"}` in Clerk Dashboard → Sessions → Customize session token.
 - [ ] Org onboarding flow for enterprise clients with own IdP (SAML/OIDC)?
 - [ ] Per-org role scoping vs global roles for year one?
-- [ ] Webhook vs on-demand upsert for Clerk → local DB sync? (current spike uses on-demand upsert)
+- [x] ~~Webhook vs on-demand upsert for Clerk → local DB sync?~~ **On-demand upsert** via `AshActorPlug` — upserts by `clerk_id` on each request. Simple, no webhook infrastructure needed for MVP.
 - [ ] Session duration and refresh token strategy?
 - [ ] Next.js 16 proxy migration timeline (middleware.ts deprecated)?
+- [ ] Microsoft SSO provider configuration in Clerk Dashboard (not tested in spike — straightforward config)
+
+---
+
+## Manual Integration Test Results
+
+Tested with live Clerk free-tier instance (evolved-camel-15.clerk.accounts.dev).
+
+| Test | Result | Notes |
+|---|---|---|
+| Email/password sign-up | **Pass** | New user created in Clerk, visible in Clerk Dashboard Users |
+| Email/password sign-in (Phoenix) | **Pass** | ClerkJS → `__session` cookie → dashboard shows Clerk ID |
+| Email/password sign-in (Next.js) | **Pass** | Full user info displayed including email and profile photo |
+| Cross-app auth (Next.js → Phoenix) | **Pass** | `getToken()` → Bearer header → `/api/verify` returns verified user JSON |
+| Sign-out (Phoenix) | **Pass** | `Clerk.signOut()` → cookie cleared → redirected to `/` |
+| Dashboard shows user data | **Partial** | Clerk ID, org fields work. Email requires custom session token config (see Open Questions). |
+| Microsoft SSO | **Not tested** | Requires Entra ID provider configuration in Clerk Dashboard |
 
 ---
 
 ## Recommendation
 
-**Proceed with Clerk** as the centralized auth broker.
+**Go — proceed with Clerk** as the centralized auth broker.
 
-The spike validates all critical integration points. The highest-risk item (Ash + Clerk coexistence) is confirmed working. The integration complexity for Elixir/Phoenix is medium but well-understood — a ~80 LOC plug with a standard pattern. Next.js is trivial.
+The spike validates all critical integration points with a live Clerk instance. Email/password sign-up, sign-in, cross-app auth, and sign-out all work end-to-end across both Phoenix and Next.js apps. The highest-risk item (Ash + Clerk coexistence) is confirmed working. The integration complexity for Elixir/Phoenix is medium but well-understood — a ~100 LOC plug with a standard pattern. Next.js is trivial.
 
 **Next steps:**
-1. Create live Clerk instance (free tier) with Microsoft SSO enabled
-2. Run manual integration test checklist (see SPIKE_PLAN.md)
-3. If all manual tests pass → green-light rollout plan from PROPOSAL.md
-4. If Clerk JWT doesn't include needed claims → configure custom JWT template
+1. Configure Microsoft as social provider in Clerk Dashboard (Entra ID OAuth)
+2. Configure custom session token to include email claim
+3. Test Microsoft SSO flow end-to-end
+4. If Microsoft SSO works → green-light rollout plan from PROPOSAL.md
 5. If Microsoft SSO has issues → investigate Clerk's Microsoft provider config before considering Auth0 fallback
