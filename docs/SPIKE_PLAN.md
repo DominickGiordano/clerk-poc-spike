@@ -124,6 +124,8 @@ Create `lib/my_app_web/plugs/clerk_auth_plug.ex`:
 defmodule MyAppWeb.ClerkAuthPlug do
   import Plug.Conn
 
+  # BUG: This runs at compile time, not runtime. See FINDINGS.md.
+  # Fix: Use Application.get_env(:my_app, :clerk)[:jwt_key] in runtime.exs
   @clerk_jwt_key System.get_env("CLERK_JWT_KEY")
 
   def init(opts), do: opts
@@ -338,3 +340,41 @@ These don't block the spike but need answers before full rollout:
 - [Phoenix LiveView Authentication Pattern](https://elixircasts.io/phoenix-liveview-authentication)
 - [AshAuthentication Docs](https://hexdocs.pm/ash_authentication)
 - [ueberauth_auth0 (fallback path)](https://github.com/ueberauth/ueberauth_auth0)
+
+---
+
+## Spike Outcomes (Post-Implementation)
+
+> Added after building the POC apps. See `docs/FINDINGS.md` for full analysis.
+
+### Day 1 Test Criteria — Results
+
+- [x] ~~Internal user clicks "Sign in with Microsoft"~~ → **Structural pass.** ClerkJS sign-in component mounts, JWT flow validated with test keys. Live Clerk instance needed for Microsoft SSO.
+- [x] `conn.assigns.current_user` is populated with correct user data → **Pass.** 8 unit tests confirm all cases.
+- [x] `__session` cookie is present and verifiable → **Pass.** Cookie and Bearer header extraction both tested.
+- [x] Non-authenticated request correctly gets `current_user: nil` → **Pass.**
+
+### Day 2 Test Criteria — Results
+
+- [x] LiveView `on_mount` correctly inherits authenticated user from HTTP session → **Pass.** 4 test cases.
+- [x] Unauthenticated users are redirected before LiveView mounts → **Pass.**
+- [x] Ash actor can be set from Clerk-verified user without breaking policy evaluation → **Pass.** `Ash.PlugHelpers.set_actor/2` works with plain Ash resource.
+- [x] ~~External client user (email/password) flows through the same path as internal Microsoft SSO user~~ → **Pass by design.** Both produce identical JWTs → same plug → same session.
+
+### Bugs Found in Original Plan
+
+1. **Compile-time env var bug (Step 3):** `@clerk_jwt_key System.get_env("CLERK_JWT_KEY")` runs at compile time, not runtime. Fixed with `Application.get_env(:phoenix_app, :clerk)[:jwt_key]` in `runtime.exs`.
+2. **Session clearing bug:** Original plug cleared session when no JWT present, breaking LiveView reconnections. Fixed: no-token case now preserves existing session.
+3. **Repo module conflict:** `use Ecto.Repo` and `use AshPostgres.Repo` can't be combined (duplicate `start_link/1`). Must use only `AshPostgres.Repo` which wraps `Ecto.Repo`.
+
+### Answered Open Questions
+
+- **Clerk → local DB user sync:** On-demand upsert in `AshActorPlug` (upsert by `clerk_id` on each request). Simple, no webhook infrastructure needed.
+- **Ash policy evaluation:** Policies work as-is. `actor(:id)` reads from the Ash resource set via `set_actor/2`. No AshAuthentication dependency.
+
+### Remaining Open Questions
+
+- Org onboarding flow for enterprise clients with own IdP
+- Per-org role scoping vs global roles
+- Session duration and refresh strategy
+- Custom JWT template for email claim (verify with live Clerk instance)

@@ -1,0 +1,22 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Erlang/Elixir
+erl_crash.dump
+*.ez
+
+# mise
+mise.local.toml
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
